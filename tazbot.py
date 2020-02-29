@@ -1,4 +1,4 @@
-#Small script that gets most popular articles from taz.de and sends them in a telegram channel
+#Small telegram bot that gets most popular articles from taz.de and sends them in a telegram channel
 from bs4 import BeautifulSoup
 import requests
 import schedule
@@ -6,22 +6,27 @@ import telegram
 import time
 import os
 import datetime
-
-print(datetime.datetime.now())
+from dotenv import load_dotenv
+load_dotenv()
 
 token = os.environ["telegramToken"]
+myusername = os.environ["myTelegramChatID"]
 bot = telegram.Bot(token=token)
-print(bot.get_me())
-
 COLLECTION = {}
+
+def messageAdmin(message):
+    try:
+        bot.send_message(myusername, message)
+    except:
+        pass
 
 def scrape():
     print("Scraping...")
     global COLLECTION
 
-    url = "https://taz.de"
+    urlTaz = "https://taz.de"
 
-    website = requests.get(url)
+    website = requests.get(urlTaz)
     soup = BeautifulSoup(website.content, features="html.parser")
 
     divs = soup.find_all("div", "sect_shop")
@@ -30,22 +35,30 @@ def scrape():
     for a in articles:
         try:
             messageText = ""
-            urll = str(a.get('href'))
+            urlArticle = str(a.get('href'))
             
-            if urll != "None":
+            if urlArticle != "None":
                 title = a.h4.text
-                link = url+urll
+                link = urlTaz+urlArticle
 
                 website = requests.get(link)
                 soup = BeautifulSoup(website.content, features="html.parser")
 
                 subtitle = soup.find_all("p", "intro")
-                messageText += f"**{title}**\n{subtitle[0].text} \n{link}\n"
+                messageText += f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
                 if title not in articles:
                     COLLECTION[title] = messageText
         except Exception as e:
             print()
             print(f"ERROR: {e}")
+
+            message = f"Error. Couldn't scrape taz.de\n\n{e}"
+            messageAdmin(message)
+    
+    print("Current size of Article Collection: ", len(COLLECTION))
+    if len(COLLECTION) == 0:
+        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'"
+        messageAdmin(message)
 
 def send():
     print("Sending...")
@@ -64,11 +77,18 @@ def send():
         else:
             count += 1
 
-    bot.send_message("@taztopstories", message)
+    try:
+        bot.send_message("@taztopstories", message, parse_mode=telegram.ParseMode.MARKDOWN)
+    except as e:
+        messageAdmin(e)
     COLLECTION = {}
 
-schedule.every(1).hour.do(scrape)
-schedule.every().day.at("17:40").do(send)
+print("Current Date and Time: ", datetime.datetime.now())
+print("Telegram Bot Infos: ", bot.get_me())
+bot.send_message(myusername, f"Started tazBot")
+
+schedule.every().hour.do(scrape)
+schedule.every().day.at("17:35").do(send)
 
 scrape()
 while True:
