@@ -79,7 +79,7 @@ def send():
 
     try:
         bot.send_message("@taztopstories", message, parse_mode=telegram.ParseMode.MARKDOWN)
-    except as e:
+    except Exception as e:
         messageAdmin(e)
     COLLECTION = {}
 
