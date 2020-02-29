@@ -13,6 +13,7 @@ token = os.environ["telegramToken"]
 myusername = os.environ["myTelegramChatID"]
 bot = telegram.Bot(token=token)
 COLLECTION = {}
+OLDCOLLECTION = {}
 
 def messageAdmin(message):
     try:
@@ -46,7 +47,7 @@ def scrape():
 
                 subtitle = soup.find_all("p", "intro")
                 messageText += f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
-                if title not in articles:
+                if title not in COLLECTION and title not in OLDCOLLECTION:
                     COLLECTION[title] = messageText
         except Exception as e:
             print()
@@ -56,6 +57,8 @@ def scrape():
             messageAdmin(message)
     
     print("Current size of Article Collection: ", len(COLLECTION))
+    print("Artikel: ",list(COLLECTION.keys()))
+
     if len(COLLECTION) == 0:
         message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'"
         messageAdmin(message)
@@ -64,6 +67,7 @@ def send():
     print("Sending...")
 
     global COLLECTION
+    global OLDCOLLECTION
     count = 1
     message = ""
 
@@ -81,16 +85,21 @@ def send():
         bot.send_message("@taztopstories", message, parse_mode=telegram.ParseMode.MARKDOWN)
     except Exception as e:
         messageAdmin(e)
+    OLDCOLLECTION = COLLECTION
     COLLECTION = {}
 
 print("Current Date and Time: ", datetime.datetime.now())
 print("Telegram Bot Infos: ", bot.get_me())
 bot.send_message(myusername, f"Started tazBot")
 
-schedule.every().hour.do(scrape)
-schedule.every().day.at("17:35").do(send)
+schedule.every().day.at("00:10").do(scrape)
+schedule.every().day.at("10:30").do(scrape)
+schedule.every().day.at("12:45").do(scrape)
+schedule.every().day.at("15:15").do(scrape)
+schedule.every().day.at("17:25").do(scrape)
+schedule.every().day.at("17:30").do(send)
 
 scrape()
 while True:
     schedule.run_pending()
-    time.sleep(600)
+    time.sleep(1200)
