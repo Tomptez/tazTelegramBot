@@ -64,7 +64,7 @@ def send():
         else:
             count += 1
 
-    bot.send_message("@taztopstories", print(message))
+    bot.send_message("@taztopstories", message)
     COLLECTION = {}
 
 schedule.every(1).hour.do(scrape)
