@@ -10,14 +10,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 token = os.environ["telegramToken"]
-myusername = os.environ["myTelegramChatID"]
+adminUsername = os.environ["adminTelegramChatID"]
+channelName = os.environ["publicChannelName"]
 bot = telegram.Bot(token=token)
 COLLECTION = {}
-OLDCOLLECTION = {}
+COLLECTION_YESTERDAY = {}
 
 def messageAdmin(message):
     try:
-        bot.send_message(myusername, message)
+        bot.send_message(adminUsername, message)
     except:
         pass
 
@@ -30,25 +31,26 @@ def scrape():
     website = requests.get(urlTaz)
     soup = BeautifulSoup(website.content, features="html.parser")
 
-    divs = soup.find_all("div", "sect_shop")
-    articles = divs[0].find_all("a")
+    meistgelesenDiv = soup.find("div", "sect_shop")
+    meistgelesenUl = meistgelesenDiv.find("ul")
+    articles = meistgelesenUl.find_all("a")
 
     for a in articles:
         try:
-            messageText = ""
+            title = a.h4.text
+            # Skip article if it's already in the collection
+            if title in COLLECTION or title in COLLECTION_YESTERDAY:
+                continue
+
             urlArticle = str(a.get('href'))
-            
-            if urlArticle != "None":
-                title = a.h4.text
-                link = urlTaz+urlArticle
+            link = urlTaz+urlArticle
+            website = requests.get(link)
+            soup = BeautifulSoup(website.content, features="html.parser")
 
-                website = requests.get(link)
-                soup = BeautifulSoup(website.content, features="html.parser")
+            subtitle = soup.find_all("p", "intro")
+            messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
+            COLLECTION[title] = messageText
 
-                subtitle = soup.find_all("p", "intro")
-                messageText += f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
-                if title not in COLLECTION and title not in OLDCOLLECTION:
-                    COLLECTION[title] = messageText
         except Exception as e:
             print()
             print(f"ERROR: {e}")
@@ -56,18 +58,18 @@ def scrape():
             message = f"Error. Couldn't scrape taz.de\n\n{e}"
             messageAdmin(message)
     
-    print("Current size of Article Collection: ", len(COLLECTION))
-    print("Artikel: ",list(COLLECTION.keys()))
+    print(f"Current size of Article Collection: {len(COLLECTION)}, Yesterday: {len(COLLECTION_YESTERDAY)}")
+    print("Today's articles: ",list(COLLECTION.keys()))
 
     if len(COLLECTION) == 0:
-        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'"
+        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION == 0"
         messageAdmin(message)
 
 def send():
     print("Sending...")
 
     global COLLECTION
-    global OLDCOLLECTION
+    global COLLECTION_YESTERDAY
     count = 1
     message = ""
 
@@ -82,24 +84,25 @@ def send():
             count += 1
 
     try:
-        bot.send_message("@taztopstories", message, parse_mode=telegram.ParseMode.MARKDOWN)
+        bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
     except Exception as e:
         messageAdmin(e)
-    OLDCOLLECTION = COLLECTION
+    COLLECTION_YESTERDAY = COLLECTION
     COLLECTION = {}
 
 print("Current Date and Time: ", datetime.datetime.now())
 print("Telegram Bot Infos: ", bot.get_me())
-bot.send_message(myusername, f"Started tazBot")
+messageAdmin(f"Started tazBot {datetime.datetime.now()}")
 
 schedule.every().day.at("00:10").do(scrape)
 schedule.every().day.at("10:30").do(scrape)
 schedule.every().day.at("12:45").do(scrape)
 schedule.every().day.at("15:15").do(scrape)
-schedule.every().day.at("17:25").do(scrape)
-schedule.every().day.at("17:30").do(send)
+schedule.every().day.at("17:30").do(scrape)
+schedule.every().day.at("17:35").do(send)
 
 scrape()
+send()
 while True:
     schedule.run_pending()
-    time.sleep(1200)
+    time.sleep(600)
