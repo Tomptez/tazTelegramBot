@@ -28,12 +28,16 @@ def scrape():
 
     urlTaz = "https://taz.de"
 
-    website = requests.get(urlTaz)
-    soup = BeautifulSoup(website.content, features="html.parser")
-
-    meistgelesenDiv = soup.find("div", "sect_shop")
-    meistgelesenUl = meistgelesenDiv.find("ul")
-    articles = meistgelesenUl.find_all("a")
+    try:
+        website = requests.get(urlTaz)
+        soup = BeautifulSoup(website.content, features="html.parser")
+        meistgelesenDiv = soup.find("div", "sect_shop")
+        meistgelesenUl = meistgelesenDiv.find("ul")
+        articles = meistgelesenUl.find_all("a")
+    except:
+        articles = []
+        print("ERROR encountered. Maybe taz.de is down?")
+        messageAdmin("ERROR encountered. Maybe taz.de is down?")
 
     for a in articles:
         try:
@@ -61,8 +65,8 @@ def scrape():
     print(f"Current size of Article Collection: {len(COLLECTION)}, Yesterday: {len(COLLECTION_YESTERDAY)}")
     print("Today's articles: ",list(COLLECTION.keys()))
 
-    if len(COLLECTION) == 0:
-        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION == 0"
+    if len(COLLECTION) == 0 or len(articles) == 0:
+        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION = {COLLECTION}"
         messageAdmin(message)
 
 def send():
