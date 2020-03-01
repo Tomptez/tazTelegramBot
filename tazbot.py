@@ -106,7 +106,6 @@ schedule.every().day.at("17:30").do(scrape)
 schedule.every().day.at("17:35").do(send)
 
 scrape()
-send()
 while True:
     schedule.run_pending()
     time.sleep(600)
