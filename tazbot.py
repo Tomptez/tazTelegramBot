@@ -62,7 +62,7 @@ def scrape():
             message = f"Error. Couldn't scrape taz.de\n\n{e}"
             messageAdmin(message)
     
-    print(f"Current size of Article Collection: {len(COLLECTION)}, Yesterday: {len(COLLECTION_YESTERDAY)}")
+    print(f"Number of articles for today: {len(COLLECTION)}, Yesterday: {len(COLLECTION_YESTERDAY)}")
     print("Today's articles: ",list(COLLECTION.keys()))
 
     if len(COLLECTION) == 0 or len(articles) == 0:
