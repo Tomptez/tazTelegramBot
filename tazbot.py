@@ -100,7 +100,7 @@ def send(attempt=0):
     except Exception as e:
         print(e)
         if attempt <= 2:
-            messageAdmin(f{"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
+            messageAdmin(f"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
         if attempt <= 15:
             print("Will try to send again in 10 minutes...")
             time.sleep(600)
