@@ -75,7 +75,7 @@ def scrape():
         message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION = {COLLECTION}"
         messageAdmin(message)
 
-def send(cancelJob=False):
+def send(attempt=0):
     print("Sending...")
 
     global COLLECTION
@@ -99,12 +99,12 @@ def send(cancelJob=False):
         COLLECTION = {}
     except Exception as e:
         print(e)
-        messageAdmin(e)
-        if not cancelJob:
-            schedule.every().day.at("18:00").do(send, cancelJob=True)
-
-    if cancelJob:
-        return schedule.CancelJob
+        if attempt <= 2:
+            messageAdmin(f{"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
+        if attempt <= 15:
+            print("Will try to send again in 10 minutes...")
+            time.sleep(600)
+            send(attempt+1)
 
 if __name__ == "__main__":
     print("Current Date and Time: ", datetime.datetime.now())
@@ -119,7 +119,6 @@ if __name__ == "__main__":
     schedule.every().day.at("17:35").do(send)
 
     scrape()
-    send()
     while True:
         schedule.run_pending()
         time.sleep(600)
