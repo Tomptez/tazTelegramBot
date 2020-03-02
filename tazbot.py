@@ -7,6 +7,7 @@ import time
 import os
 import datetime
 from dotenv import load_dotenv
+import traceback
 load_dotenv()
 
 token = os.environ["telegramToken"]
@@ -48,7 +49,7 @@ def scrape():
             
             # Make sure the currently most read articles are the last ones in the collection
             elif title in COLLECTION:
-                COLLECTION = COLLECTION.pop(title)
+                COLLECTION[title] = COLLECTION.pop(title)
                 continue
             
             else:
@@ -61,7 +62,8 @@ def scrape():
                 messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
                 COLLECTION[title] = messageText
 
-        except Exception as e:
+        except Exception:
+            e = traceback.format_exc()
             print()
             print(f"ERROR: {e}")
 
@@ -97,11 +99,12 @@ def send(attempt=0):
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
         COLLECTION_YESTERDAY = COLLECTION
         COLLECTION = {}
-    except Exception as e:
+    except Exception:
+        e = traceback.format_exc()
         print(e)
-        if attempt <= 2:
+        if attempt <= 1:
             messageAdmin(f"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
-        if attempt <= 15:
+        if attempt <= 30:
             print("Will try to send again in 10 minutes...")
             time.sleep(600)
             send(attempt+1)
