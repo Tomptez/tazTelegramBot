@@ -19,8 +19,8 @@ COLLECTION_YESTERDAY = {}
 def messageAdmin(message):
     try:
         bot.send_message(adminUsername, message)
-    except:
-        pass
+    except Exception:
+        print(f"Error. Could not send Error message to admin.")
 
 def scrape():
     print("Scraping...")
@@ -34,7 +34,7 @@ def scrape():
         meistgelesenDiv = soup.find("div", "sect_shop")
         meistgelesenUl = meistgelesenDiv.find("ul")
         articles = meistgelesenUl.find_all("a")
-    except:
+    except Exception:
         articles = []
         print("ERROR encountered. Maybe taz.de is down?")
         messageAdmin("ERROR encountered. Maybe taz.de is down?")
@@ -42,18 +42,24 @@ def scrape():
     for a in articles:
         try:
             title = a.h4.text
-            # Skip article if it's already in the collection
-            if title in COLLECTION or title in COLLECTION_YESTERDAY:
+            # Skip article if it was in yesterday's articles
+            if title in COLLECTION_YESTERDAY:
                 continue
+            
+            # Make sure the currently most read articles are the last ones in the collection
+            elif title in COLLECTION:
+                COLLECTION = COLLECTION.pop(title)
+                continue
+            
+            else:
+                urlArticle = str(a.get('href'))
+                link = urlTaz+urlArticle
+                website = requests.get(link)
+                soup = BeautifulSoup(website.content, features="html.parser")
 
-            urlArticle = str(a.get('href'))
-            link = urlTaz+urlArticle
-            website = requests.get(link)
-            soup = BeautifulSoup(website.content, features="html.parser")
-
-            subtitle = soup.find_all("p", "intro")
-            messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
-            COLLECTION[title] = messageText
+                subtitle = soup.find_all("p", "intro")
+                messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
+                COLLECTION[title] = messageText
 
         except Exception as e:
             print()
@@ -69,7 +75,7 @@ def scrape():
         message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION = {COLLECTION}"
         messageAdmin(message)
 
-def send():
+def send(cancelJob=False):
     print("Sending...")
 
     global COLLECTION
@@ -89,23 +95,31 @@ def send():
 
     try:
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
+        COLLECTION_YESTERDAY = COLLECTION
+        COLLECTION = {}
     except Exception as e:
+        print(e)
         messageAdmin(e)
-    COLLECTION_YESTERDAY = COLLECTION
-    COLLECTION = {}
+        if not cancelJob:
+            schedule.every().day.at("18:00").do(send, cancelJob=True)
 
-print("Current Date and Time: ", datetime.datetime.now())
-print("Telegram Bot Infos: ", bot.get_me())
-messageAdmin(f"Started tazBot {datetime.datetime.now()}")
+    if cancelJob:
+        return schedule.CancelJob
 
-schedule.every().day.at("00:10").do(scrape)
-schedule.every().day.at("10:30").do(scrape)
-schedule.every().day.at("12:45").do(scrape)
-schedule.every().day.at("15:15").do(scrape)
-schedule.every().day.at("17:30").do(scrape)
-schedule.every().day.at("17:35").do(send)
+if __name__ == "__main__":
+    print("Current Date and Time: ", datetime.datetime.now())
+    print("Telegram Bot Infos: ", bot.get_me())
+    messageAdmin(f"Started tazBot {datetime.datetime.now()}")
 
-scrape()
-while True:
-    schedule.run_pending()
-    time.sleep(600)
+    schedule.every().day.at("00:10").do(scrape)
+    schedule.every().day.at("10:30").do(scrape)
+    schedule.every().day.at("13:45").do(scrape)
+    schedule.every().day.at("15:45").do(scrape)
+    schedule.every().day.at("17:30").do(scrape)
+    schedule.every().day.at("17:35").do(send)
+
+    scrape()
+    send()
+    while True:
+        schedule.run_pending()
+        time.sleep(600)
