@@ -151,7 +151,7 @@ if __name__ == "__main__":
                 OLDARTICLES.append(currentPlace)
         ARTICLESET = set(OLDARTICLES)
     except:
-        print("The is no such file as file.txt")
+        print("Couldn't load old Article titles. There is no such file as file.txt")
 
     scrape()
     while True:

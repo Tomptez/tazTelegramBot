@@ -2,7 +2,7 @@
 
 A Telegram bot written in python that posts most read articles from taz.de (german newspaper site) to a telegram channel once a day. It tries to reduce scraping traffic to a minimum.
 
-A really basic bot made for personal use, might be extended at some point.
+It's a rather basic bot made primarily for learning purposes.
 
 ## Environment Variables ##
 `telegramToken` = Token of the telegram bot  
