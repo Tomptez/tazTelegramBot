@@ -15,7 +15,8 @@ adminUsername = os.environ["adminTelegramChatID"]
 channelName = os.environ["publicChannelName"]
 bot = telegram.Bot(token=token)
 COLLECTION = {}
-COLLECTION_YESTERDAY = {}
+OLDARTICLES = []
+ARTICLESET = set()
 
 def messageAdmin(message):
     try:
@@ -44,7 +45,7 @@ def scrape():
         try:
             title = a.h4.text
             # Skip article if it was in yesterday's articles
-            if title in COLLECTION_YESTERDAY:
+            if title in ARTICLESET:
                 continue
             
             # Make sure the currently most read articles are the last ones in the collection
@@ -60,7 +61,7 @@ def scrape():
 
                 subtitle = soup.find_all("p", "intro")
                 messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
-                COLLECTION[title] = messageText
+                COLLECTION[title] = {"text":messageText}
 
         except Exception:
             e = traceback.format_exc()
@@ -70,24 +71,32 @@ def scrape():
             message = f"Error. Couldn't scrape taz.de\n\n{e}"
             messageAdmin(message)
     
-    print(f"Number of articles for today: {len(COLLECTION)}, Yesterday: {len(COLLECTION_YESTERDAY)}")
+    print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
     print("Today's articles: ",list(COLLECTION.keys()))
 
     if len(COLLECTION) == 0 or len(articles) == 0:
-        message = f"Problem with scraping of taz.de. Couldn't retrieve any articles from 'meistgelesen'. COLLECTION = {COLLECTION}"
+        message = f"Possible problem with scraping of taz.de. COLLECTION = {COLLECTION}"
         messageAdmin(message)
 
 def send(attempt=0):
     print("Sending...")
 
     global COLLECTION
-    global COLLECTION_YESTERDAY
+    global OLDARTICLES
+    global ARTICLESET
     count = 1
     message = ""
 
-    for article, text in reversed(COLLECTION.items()):
+    if len(COLLECTION) == 0:
+        print("Empty COLLECTION. Could not send anything.")
+        print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
+        return False
 
-        message += text
+    sendedArticles = []
+    for article, list in reversed(COLLECTION.items()):
+
+        message += list["text"]
+        sendedArticles.append(article)
 
         # Makes sure it sends at most 8 messages
         if count >= 8:
@@ -96,9 +105,20 @@ def send(attempt=0):
             count += 1
 
     try:
+        if message == "":
+            raise Exception("Empty message")
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
-        COLLECTION_YESTERDAY = COLLECTION
+
+        OLDARTICLES += sendedArticles
+        OLDARTICLES = OLDARTICLES[-300:]
+        ARTICLESET = set(OLDARTICLES)
         COLLECTION = {}
+        with open('file.txt', 'w') as f:
+            for listitem in OLDARTICLES:
+                f.write(f'{listitem}\n')
+
+        print("Saved Article-titles: ", OLDARTICLES)
+        print("Successfully sent!")
     except Exception:
         e = traceback.format_exc()
         print(e)
@@ -108,11 +128,11 @@ def send(attempt=0):
             print("Will try to send again in 10 minutes...")
             time.sleep(600)
             send(attempt+1)
+    finally:
+        print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
 
 if __name__ == "__main__":
-    print("Current Date and Time: ", datetime.datetime.now())
     print("Telegram Bot Infos: ", bot.get_me())
-    messageAdmin(f"Started tazBot {datetime.datetime.now()}")
 
     schedule.every().day.at("00:10").do(scrape)
     schedule.every().day.at("10:30").do(scrape)
@@ -121,7 +141,22 @@ if __name__ == "__main__":
     schedule.every().day.at("17:30").do(scrape)
     schedule.every().day.at("17:35").do(send)
 
+    try:
+        with open('file.txt', 'r') as f:
+            for line in f:
+                # remove linebreak which is the last character of the string
+                currentPlace = line[:-1]
+
+                # add item to the list
+                OLDARTICLES.append(currentPlace)
+        ARTICLESET = set(OLDARTICLES)
+    except:
+        print("The is no such file as file.txt")
+
     scrape()
     while True:
-        schedule.run_pending()
-        time.sleep(600)
+        try:
+            schedule.run_pending()
+            time.sleep(600)
+        except Exception as e:
+            print(e)
