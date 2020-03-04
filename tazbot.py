@@ -41,16 +41,19 @@ def scrape():
         print("ERROR encountered. Maybe taz.de is down?")
         messageAdmin("ERROR encountered. Maybe taz.de is down?")
 
+    tmpCollection = {}
     for a in articles:
+        
         try:
+            name = a.text
             title = a.h4.text
             # Skip article if it was in yesterday's articles
-            if title in ARTICLESET:
+            if name in ARTICLESET:
                 continue
             
             # Make sure the currently most read articles are the last ones in the collection
-            elif title in COLLECTION:
-                COLLECTION[title] = COLLECTION.pop(title)
+            elif name in COLLECTION:
+                COLLECTION[name] = COLLECTION.pop(name)
                 continue
             
             else:
@@ -60,8 +63,8 @@ def scrape():
                 soup = BeautifulSoup(website.content, features="html.parser")
 
                 subtitle = soup.find_all("p", "intro")
-                messageText = f"*{title}*\n{subtitle[0].text} \n{link}\n\n"
-                COLLECTION[title] = {"text":messageText}
+                messageText = f"*{title}*\n{subtitle[0].text} \n{link}"
+                tmpCollection[name] = {"text":messageText, "title":title}
 
         except Exception:
             e = traceback.format_exc()
@@ -70,9 +73,17 @@ def scrape():
 
             message = f"Error. Couldn't scrape taz.de\n\n{e}"
             messageAdmin(message)
+
+    for i in range(-1,(len(tmpCollection)+1)*-1,-1):
+        key = list(tmpCollection.keys())[i]
+        COLLECTION[key] = tmpCollection[key]  
     
     print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
-    print("Today's articles: ",list(COLLECTION.keys()))
+    
+    articleList = []
+    for key, value in COLLECTION.items():
+        articleList.append(value["title"])
+    print("Today's articles: ", articleList)
 
     if len(COLLECTION) == 0 or len(articles) == 0:
         message = f"Possible problem with scraping of taz.de. COLLECTION = {COLLECTION}"
@@ -92,25 +103,23 @@ def send(attempt=0):
         print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
         return False
 
-    sendedArticles = []
-    for article, list in reversed(COLLECTION.items()):
-
-        message += list["text"]
-        sendedArticles.append(article)
-
-        # Makes sure it sends at most 8 messages
-        if count >= 8:
+    sentArticles = []
+    for i in range(-1,-9,-1):
+        try:
+            key = list(COLLECTION.keys())[i]
+            message += COLLECTION[key]["text"]+"\n\n"
+            sentArticles.append(key)
+        except Exception:
+            print("Less than 8 Articles in COLLECTION")
             break
-        else:
-            count += 1
 
     try:
         if message == "":
             raise Exception("Empty message")
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
 
-        OLDARTICLES += sendedArticles
-        OLDARTICLES = OLDARTICLES[-300:]
+        OLDARTICLES += sentArticles
+        OLDARTICLES = OLDARTICLES[-168:]
         ARTICLESET = set(OLDARTICLES)
         COLLECTION = {}
         with open('file.txt', 'w') as f:
@@ -118,7 +127,8 @@ def send(attempt=0):
                 f.write(f'{listitem}\n')
 
         print("Saved Article-titles: ", OLDARTICLES)
-        print("Successfully sent!")
+        print()
+        print("Sending successful!")
     except Exception:
         e = traceback.format_exc()
         print(e)
@@ -135,11 +145,13 @@ if __name__ == "__main__":
     print("Telegram Bot Infos: ", bot.get_me())
 
     schedule.every().day.at("00:10").do(scrape)
-    schedule.every().day.at("10:30").do(scrape)
+    schedule.every().day.at("11:00").do(scrape)
     schedule.every().day.at("13:45").do(scrape)
     schedule.every().day.at("15:45").do(scrape)
+    schedule.every().day.at("17:00").do(scrape)
     schedule.every().day.at("17:30").do(scrape)
-    schedule.every().day.at("17:35").do(send)
+    schedule.every().day.at("18:05").do(scrape)
+    schedule.every().day.at("18:06").do(send)
 
     try:
         with open('file.txt', 'r') as f:
@@ -154,6 +166,9 @@ if __name__ == "__main__":
         print("Couldn't load old Article titles. There is no such file as file.txt")
 
     scrape()
+    send()
+    scrape()
+    send()
     while True:
         try:
             schedule.run_pending()
