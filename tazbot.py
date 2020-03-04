@@ -166,9 +166,6 @@ if __name__ == "__main__":
         print("Couldn't load old Article titles. There is no such file as file.txt")
 
     scrape()
-    send()
-    scrape()
-    send()
     while True:
         try:
             schedule.run_pending()
