@@ -119,7 +119,7 @@ def send(attempt=0):
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
 
         OLDARTICLES += sentArticles
-        OLDARTICLES = OLDARTICLES[-168:]
+        OLDARTICLES = OLDARTICLES[-64:]
         ARTICLESET = set(OLDARTICLES)
         COLLECTION = {}
         with open('file.txt', 'w') as f:
@@ -130,13 +130,15 @@ def send(attempt=0):
         print()
         print("Sending successful!")
     except Exception:
-        e = traceback.format_exc()
-        print(e)
         if attempt <= 1:
+            print(f"Message: \n{message}")
+            e = traceback.format_exc()
+            print(e)
             messageAdmin(f"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
-        if attempt <= 30:
-            print("Will try to send again in 10 minutes...")
+        if attempt <= 20:
+            print("Couln't send articles. Will try to send again in 10 minutes...")
             time.sleep(600)
+            scrape()
             send(attempt+1)
     finally:
         print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
