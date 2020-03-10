@@ -12,6 +12,7 @@ python-telegram-bot = "*"
 schedule = "*"
 python-dotenv = "*"
 sqlalchemy = "*"
+psycopg2 = "*"
 
 [requires]
 python_version = "3.8"

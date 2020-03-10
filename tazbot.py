@@ -174,9 +174,6 @@ if __name__ == "__main__":
     schedule.every().day.at("18:06").do(send)
 
     scrape()
-    send()
-    scrape()
-    send()
     while True:
         try:
             schedule.run_pending()
