@@ -6,6 +6,10 @@ import telegram
 import time
 import os
 import datetime
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import traceback
 load_dotenv()
@@ -13,10 +17,23 @@ load_dotenv()
 token = os.environ["telegramToken"]
 adminUsername = os.environ["adminTelegramChatID"]
 channelName = os.environ["publicChannelName"]
+
+engine = create_engine(os.environ["DATABASE_URL"])
+Base = declarative_base()
+
+class dbArticle(Base):
+    __tablename__ = 'articles'
+    id = Column(Integer, primary_key=True)
+    key = Column(String)
+    created = Column(DateTime, default=datetime.datetime.utcnow)
+
+Base.metadata.bind = engine      
+Base.metadata.create_all() 
+Session = sessionmaker(bind=engine)
+session = Session()
+
 bot = telegram.Bot(token=token)
 COLLECTION = {}
-OLDARTICLES = []
-ARTICLESET = set()
 
 def messageAdmin(message):
     try:
@@ -48,7 +65,7 @@ def scrape():
             name = a.text
             title = a.h4.text
             # Skip article if it was in yesterday's articles
-            if name in ARTICLESET:
+            if session.query(dbArticle).filter(dbArticle.key==name).first():
                 continue
             
             # Make sure the currently most read articles are the last ones in the collection
@@ -63,7 +80,7 @@ def scrape():
                 soup = BeautifulSoup(website.content, features="html.parser")
 
                 subtitle = soup.find_all("p", "intro")
-                messageText = f"*{title}*\n{subtitle[0].text} \n{link}"
+                messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{link}"
                 tmpCollection[name] = {"text":messageText, "title":title}
 
         except Exception:
@@ -78,7 +95,7 @@ def scrape():
         key = list(tmpCollection.keys())[i]
         COLLECTION[key] = tmpCollection[key]  
     
-    print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
+    print(f"Number of articles for today: {len(COLLECTION)}")
     
     articleList = []
     for key, value in COLLECTION.items():
@@ -93,14 +110,12 @@ def send(attempt=0):
     print("Sending...")
 
     global COLLECTION
-    global OLDARTICLES
-    global ARTICLESET
     count = 1
     message = ""
 
     if len(COLLECTION) == 0:
         print("Empty COLLECTION. Could not send anything.")
-        print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
+        print(f"Number of articles for today: {len(COLLECTION)}")
         return False
 
     sentArticles = []
@@ -111,22 +126,25 @@ def send(attempt=0):
             sentArticles.append(key)
         except Exception:
             print("Less than 8 Articles in COLLECTION")
+            saved = session.query(dbArticle).all()
+            print("Saved Article-titles: ", len(saved))
             break
 
     try:
         if message == "":
             raise Exception("Empty message")
-        bot.send_message(channelName, message, parse_mode=telegram.ParseMode.MARKDOWN)
+        bot.send_message(channelName, message, parse_mode=telegram.ParseMode.HTML)
 
-        OLDARTICLES += sentArticles
-        OLDARTICLES = OLDARTICLES[-64:]
-        ARTICLESET = set(OLDARTICLES)
+        for eachkey in COLLECTION:
+            session.add(dbArticle(key=eachkey))
+        session.commit()
+        eightdays = datetime.datetime.now()-datetime.timedelta(days=8)
+        old = session.query(dbArticle).filter(dbArticle.created<=eightdays).delete()
+        session.commit()
         COLLECTION = {}
-        with open('file.txt', 'w') as f:
-            for listitem in OLDARTICLES:
-                f.write(f'{listitem}\n')
 
-        print("Saved Article-titles: ", OLDARTICLES)
+        saved = session.query(dbArticle).all()
+        print("Saved Article-titles: ", len(saved))
         print()
         print("Sending successful!")
     except Exception:
@@ -134,14 +152,14 @@ def send(attempt=0):
             print(f"Message: \n{message}")
             e = traceback.format_exc()
             print(e)
-            messageAdmin(f"Couln't send articles. Will try to send again in 10 minutes...\n\n{e}")
+            messageAdmin(f"Couln't send message:\n{message}\n\n. Will try to send again in 10 minutes...\nError:\n\n{e}")
         if attempt <= 20:
-            print("Couln't send articles. Will try to send again in 10 minutes...")
-            time.sleep(600)
+            print("Couln't send articles. Will try to send again in 13 minutes...")
+            time.sleep(780)
             scrape()
             send(attempt+1)
     finally:
-        print(f"Number of articles for today: {len(COLLECTION)}, Old saved ones: {len(OLDARTICLES)}")
+        print(f"Number of articles for today: {len(COLLECTION)}")
 
 if __name__ == "__main__":
     print("Telegram Bot Infos: ", bot.get_me())
@@ -155,19 +173,10 @@ if __name__ == "__main__":
     schedule.every().day.at("18:05").do(scrape)
     schedule.every().day.at("18:06").do(send)
 
-    try:
-        with open('file.txt', 'r') as f:
-            for line in f:
-                # remove linebreak which is the last character of the string
-                currentPlace = line[:-1]
-
-                # add item to the list
-                OLDARTICLES.append(currentPlace)
-        ARTICLESET = set(OLDARTICLES)
-    except:
-        print("Couldn't load old Article titles. There is no such file as file.txt")
-
     scrape()
+    send()
+    scrape()
+    send()
     while True:
         try:
             schedule.run_pending()
