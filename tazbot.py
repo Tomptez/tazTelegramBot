@@ -30,7 +30,7 @@ class dbArticle(Base):
 Base.metadata.bind = engine      
 Base.metadata.create_all() 
 Session = sessionmaker(bind=engine)
-session = Session()
+
 
 bot = telegram.Bot(token=token)
 COLLECTION = {}
@@ -40,8 +40,17 @@ def messageAdmin(message):
         bot.send_message(adminUsername, message)
     except Exception:
         print(f"Error. Could not send Error message to admin.")
+        
+def addArticle(link, title, name, tmpCollection):
+    website = requests.get(link)
+    soup = BeautifulSoup(website.content, features="html.parser")
+
+    subtitle = soup.find_all("p", "intro")
+    messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{link}"
+    tmpCollection[name] = {"text":messageText, "title":title}
 
 def scrape():
+    
     print("Scraping...")
     global COLLECTION
 
@@ -59,6 +68,7 @@ def scrape():
         messageAdmin("ERROR encountered. Maybe taz.de is down?")
 
     tmpCollection = {}
+    session = Session()
     for a in articles:
         
         try:
@@ -76,12 +86,8 @@ def scrape():
             else:
                 urlArticle = str(a.get('href'))
                 link = urlTaz+urlArticle
-                website = requests.get(link)
-                soup = BeautifulSoup(website.content, features="html.parser")
-
-                subtitle = soup.find_all("p", "intro")
-                messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{link}"
-                tmpCollection[name] = {"text":messageText, "title":title}
+                # Add article
+                addArticle(link, title, name, tmpCollection)
 
         except Exception:
             e = traceback.format_exc()
@@ -90,6 +96,7 @@ def scrape():
 
             message = f"Error. Couldn't scrape taz.de\n\n{e}"
             messageAdmin(message)
+            session.close()
 
     for i in range(-1,(len(tmpCollection)+1)*-1,-1):
         key = list(tmpCollection.keys())[i]
@@ -105,6 +112,8 @@ def scrape():
     if len(COLLECTION) == 0 or len(articles) == 0:
         message = f"Possible problem with scraping of taz.de. COLLECTION = {COLLECTION}"
         messageAdmin(message)
+    
+    session.close()
 
 def send(attempt=0):
     print("Sending...")
@@ -126,11 +135,14 @@ def send(attempt=0):
             sentArticles.append(key)
         except Exception:
             print("Less than 8 Articles in COLLECTION")
+            session = Session()
             saved = session.query(dbArticle).all()
+            session.close()
             print("Saved Article-titles: ", len(saved))
             break
 
     try:
+        session = Session()
         if message == "":
             raise Exception("Empty message")
         bot.send_message(channelName, message, parse_mode=telegram.ParseMode.HTML)
@@ -160,6 +172,7 @@ def send(attempt=0):
             send(attempt+1)
     finally:
         print(f"Number of articles for today: {len(COLLECTION)}")
+        session.close()
 
 if __name__ == "__main__":
     print("Telegram Bot Infos: ", bot.get_me())
@@ -174,6 +187,7 @@ if __name__ == "__main__":
     schedule.every().day.at("18:06").do(send)
 
     scrape()
+    send()
     while True:
         try:
             schedule.run_pending()
