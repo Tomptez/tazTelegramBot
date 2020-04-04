@@ -41,13 +41,15 @@ def messageAdmin(message):
     except Exception:
         print(f"Error. Could not send Error message to admin.")
         
-def addArticle(link, title, name, tmpCollection):
+def addArticle(link, title, tmpCollection):
     website = requests.get(link)
     soup = BeautifulSoup(website.content, features="html.parser")
 
+    articleID = link.split("!")[-1][:-1]
+    url = "https://taz.de/!"+articleID
     subtitle = soup.find_all("p", "intro")
-    messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{link}"
-    tmpCollection[name] = {"text":messageText, "title":title}
+    messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{url}"
+    tmpCollection[articleID] = {"text":messageText, "title":title}
 
 def scrape():
     
@@ -74,8 +76,13 @@ def scrape():
         try:
             name = a.text
             title = a.h4.text
+            urlArticle = str(a.get('href'))
+            link = urlTaz+urlArticle
+            articleID = link.split("!")[-1][:-1]
             # Skip article if it was in yesterday's articles
             if session.query(dbArticle).filter(dbArticle.key==name).first():
+                continue
+            elif session.query(dbArticle).filter(dbArticle.key==articleID).first():
                 continue
             
             # Make sure the currently most read articles are the last ones in the collection
@@ -84,10 +91,8 @@ def scrape():
                 continue
             
             else:
-                urlArticle = str(a.get('href'))
-                link = urlTaz+urlArticle
                 # Add article
-                addArticle(link, title, name, tmpCollection)
+                addArticle(link, title, tmpCollection)
 
         except Exception:
             e = traceback.format_exc()
@@ -123,6 +128,10 @@ def send(attempt=0):
     message = ""
 
     if len(COLLECTION) == 0:
+        session = Session()
+        saved = session.query(dbArticle).all()
+        session.close()
+        print("Saved Article-titles: ", len(saved))
         print("Empty COLLECTION. Could not send anything.")
         print(f"Number of articles for today: {len(COLLECTION)}")
         return False
@@ -138,7 +147,6 @@ def send(attempt=0):
             session = Session()
             saved = session.query(dbArticle).all()
             session.close()
-            print("Saved Article-titles: ", len(saved))
             break
 
     try:
@@ -187,7 +195,6 @@ if __name__ == "__main__":
     schedule.every().day.at("18:06").do(send)
 
     scrape()
-    send()
     while True:
         try:
             schedule.run_pending()

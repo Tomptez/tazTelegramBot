@@ -1,6 +1,7 @@
-## Cache
 __pycache__/
 .env
 .vscode/
 file.txt
 .directory
+*.db
+*.sqlite
