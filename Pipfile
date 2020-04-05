@@ -13,6 +13,7 @@ schedule = "*"
 python-dotenv = "*"
 sqlalchemy = "*"
 psycopg2 = "*"
+feedparser = "*"
 
 [requires]
 python_version = "3.8"
