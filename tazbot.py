@@ -5,6 +5,7 @@ import schedule
 import telegram
 import time
 import os
+import math
 import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -70,23 +71,34 @@ def addArticle(link, title, tmpCollection):
     tmpCollection[articleID] = {"text":messageText, "title":title, "ressort":ressort}
     session.close()
 
-def articlesFromRSS(number=1):
-    print(f"Add {number*2} Articles from RSS")
+def articlesFromRSS():
+    
     global COLLECTION
+    oldLen = len(COLLECTION)
+    needed = 8-oldLen
+    print(f"Add {needed} Articles from RSS")
+
+    polNum = math.floor((needed-1)/2)
+    geselNum = math.ceil((needed-1)/2)+1
     
     try:
         tmpCollection = {}
 
-        for i in range(0,number):
+        i = 0
+        while len(tmpCollection) != polNum and i <= 11:
             gesellschaft = feedparser.parse('https://taz.de/!p4611;rss/')
             link = gesellschaft.entries[i].link
             title = gesellschaft.entries[i].title
             addArticle(link, title, tmpCollection)
+            i += 1
 
+        i = 0
+        while len(tmpCollection) != geselNum+polNum and i <= 11:
             politik = feedparser.parse('https://taz.de/!p4615;rss/')
             link = politik.entries[i].link
             title = politik.entries[i].title
             addArticle(link, title, tmpCollection)
+            i += 1
 
         COLLECTION = {**COLLECTION,**tmpCollection}
 
@@ -152,43 +164,39 @@ def scrape():
         messageAdmin(message)
 
 def send(attempt=0):
+    articlesFromRSS()
     print("----------")
     time_now = datetime.datetime.now().strftime("%H:%M")
     print(f"[{time_now}] Sending...")
 
     global COLLECTION
-    count = 1
-    message = ""
+    finalMessage = ""
 
     if len(COLLECTION) == 0:
-        articlesFromRSS(5)
-
-        if len(COLLECTION) == 0:
-            print("Empty COLLECTION. Could not send anything.")
-            session = Session()
-            saved = session.query(dbArticle).all()
-            session.close()
-            print("Saved Article-titles: ", len(saved))
-            return False
-
-    else:
-        articlesFromRSS()
+        print("Empty COLLECTION. Could not send anything.")
+        session = Session()
+        saved = session.query(dbArticle).all()
+        session.close()
+        print("Saved Article-titles: ", len(saved))
+        return False
 
     sentArticles = []
-    for i in range(-1,-10,-1):
+    for i in range(-1,-9,-1):
         try:
             key = list(COLLECTION.keys())[i]
-            message += COLLECTION[key]["text"]+"\n\n"
+            finalMessage += COLLECTION[key]["text"]+"\n\n"
             sentArticles.append(key)
         except Exception:
             print("Less than 9 Articles in COLLECTION")
+            message = "Less than 8 Articles in COLLECTION"
+            messageAdmin(message)
             break
 
     try:
         session = Session()
-        if message == "":
+        if finalMessage == "":
             raise Exception("Empty message")
-        bot.send_message(channelName, message, parse_mode=telegram.ParseMode.HTML)
+        bot.send_message(channelName, finalMessage, parse_mode=telegram.ParseMode.HTML)
 
         for eachkey in COLLECTION:
             session.add(dbArticle(key=eachkey))
@@ -201,10 +209,10 @@ def send(attempt=0):
         
     except Exception:
         if attempt <= 1:
-            print(f"Message: \n{message}")
+            print(f"Message: \n{finalMessage}")
             e = traceback.format_exc()
             print(e)
-            messageAdmin(f"Couln't send message:\n{message}\n\n. Will try to send again in 10 minutes...\nError:\n\n{e}")
+            messageAdmin(f"Couln't send message:\n{finalMessage}\n\n. Will try to send again in 10 minutes...\nError:\n\n{e}")
         if attempt <= 20:
             print("Couln't send articles. Will try to send again in 13 minutes...")
             time.sleep(780)
@@ -218,6 +226,7 @@ def send(attempt=0):
 if __name__ == "__main__":
     print("Telegram Bot Infos: ", bot.get_me())
 
+    schedule.every().day.at("21:00").do(scrape)
     schedule.every().day.at("00:10").do(scrape)
     schedule.every().day.at("11:00").do(scrape)
     schedule.every().day.at("13:45").do(scrape)
