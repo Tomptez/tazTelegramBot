@@ -187,7 +187,7 @@ def send(attempt=0):
             finalMessage += COLLECTION[key]["text"]+"\n\n"
             sentArticles.append(key)
         except Exception:
-            print("Less than 9 Articles in COLLECTION")
+            print("Less than 8 Articles in COLLECTION")
             message = "Less than 8 Articles in COLLECTION"
             messageAdmin(message)
             break
