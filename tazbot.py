@@ -55,7 +55,7 @@ def addArticle(link, title, tmpCollection):
     
     # Make sure the currently most read articles are the last ones in the collection
     elif articleID in COLLECTION:
-        COLLECTION[name] = COLLECTION.pop(name)
+        COLLECTION[articleID] = COLLECTION.pop(articleID)
         return
     website = requests.get(link)
     soup = BeautifulSoup(website.content, features="html.parser")
@@ -175,13 +175,13 @@ def send(attempt=0):
         articlesFromRSS()
 
     sentArticles = []
-    for i in range(-1,-9,-1):
+    for i in range(-1,-10,-1):
         try:
             key = list(COLLECTION.keys())[i]
             message += COLLECTION[key]["text"]+"\n\n"
             sentArticles.append(key)
         except Exception:
-            print("Less than 8 Articles in COLLECTION")
+            print("Less than 9 Articles in COLLECTION")
             break
 
     try:
