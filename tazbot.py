@@ -72,10 +72,12 @@ def addArticle(link, title, tmpCollection):
     session.close()
 
 def articlesFromRSS():
-    
     global COLLECTION
     oldLen = len(COLLECTION)
     needed = 8-oldLen
+    if needed < 2:
+        needed = 2
+
     print(f"Add {needed} Articles from RSS")
 
     polNum = math.floor((needed-1)/2)
@@ -85,7 +87,7 @@ def articlesFromRSS():
         tmpCollection = {}
 
         i = 0
-        while len(tmpCollection) != polNum and i <= 11:
+        while len(tmpCollection) != polNum and i <= 12:
             gesellschaft = feedparser.parse('https://taz.de/!p4611;rss/')
             link = gesellschaft.entries[i].link
             title = gesellschaft.entries[i].title
@@ -93,7 +95,7 @@ def articlesFromRSS():
             i += 1
 
         i = 0
-        while len(tmpCollection) != geselNum+polNum and i <= 11:
+        while len(tmpCollection) != geselNum+polNum and i <= 12:
             politik = feedparser.parse('https://taz.de/!p4615;rss/')
             link = politik.entries[i].link
             title = politik.entries[i].title
@@ -188,8 +190,6 @@ def send(attempt=0):
             sentArticles.append(key)
         except Exception:
             print("Less than 8 Articles in COLLECTION")
-            message = "Less than 8 Articles in COLLECTION"
-            messageAdmin(message)
             break
 
     try:
