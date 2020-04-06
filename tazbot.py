@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import traceback
 import feedparser
+from collections import Counter
 
 load_dotenv()
 
@@ -66,6 +67,7 @@ def addArticle(link, title, tmpCollection):
         ressort = soup.find_all("div","sect_meta")[0].div.ul.li.a.span.text
     except Exception:
         ressort = "None"
+        print(title," has no ressort")
     subtitle = soup.find_all("p", "intro")
     messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{url}"
     tmpCollection[articleID] = {"text":messageText, "title":title, "ressort":ressort}
@@ -76,29 +78,31 @@ def articlesFromRSS():
     oldLen = len(COLLECTION)
     needed = 8-oldLen
     if needed < 2:
-        needed = 2
+        needed, polNum, geselNum = 2, 1, 1
+    else:
+        polNum = math.floor((needed-1)/2)
+        geselNum = math.ceil((needed-1)/2)+1
 
     print(f"Add {needed} Articles from RSS")
 
-    polNum = math.floor((needed-1)/2)
-    geselNum = math.ceil((needed-1)/2)+1
-    
     try:
         tmpCollection = {}
 
         i = 0
         while len(tmpCollection) != polNum and i <= 12:
-            gesellschaft = feedparser.parse('https://taz.de/!p4611;rss/')
+            gesellschaft = feedparser.parse('https://taz.de/!p4615;rss/')
             link = gesellschaft.entries[i].link
             title = gesellschaft.entries[i].title
+            title = title.split(":")[0]
             addArticle(link, title, tmpCollection)
             i += 1
 
         i = 0
         while len(tmpCollection) != geselNum+polNum and i <= 12:
-            politik = feedparser.parse('https://taz.de/!p4615;rss/')
+            politik = feedparser.parse('https://taz.de/!p4611;rss/')
             link = politik.entries[i].link
             title = politik.entries[i].title
+            title = title.split(":")[0]
             addArticle(link, title, tmpCollection)
             i += 1
 
@@ -166,12 +170,18 @@ def scrape():
         messageAdmin(message)
 
 def send(attempt=0):
-    articlesFromRSS()
+    global COLLECTION
     print("----------")
+    articlesFromRSS()
+    ressortList =  []
+    for key, value in COLLECTION.items():
+        ressortList.append(value["ressort"])
+    print("Ressorts: ",Counter(ressortList))
+    
+    
     time_now = datetime.datetime.now().strftime("%H:%M")
     print(f"[{time_now}] Sending...")
 
-    global COLLECTION
     finalMessage = ""
 
     if len(COLLECTION) == 0:
@@ -238,6 +248,7 @@ if __name__ == "__main__":
     schedule.every().day.at("18:15").do(send)
 
     scrape()
+
     while True:
         try:
             schedule.run_pending()
