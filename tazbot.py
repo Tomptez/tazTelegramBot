@@ -137,8 +137,7 @@ def scrape():
     for a in articles:
         
         try:
-            name = a.text
-            title = a.h4.text
+            title = a.contents[0].text
             urlArticle = str(a.get('href'))
             link = urlTaz+urlArticle
 
@@ -148,9 +147,9 @@ def scrape():
         except Exception:
             e = traceback.format_exc()
             print()
-            print(f"ERROR: {e}")
+            print(f"Error while scrpaing {link}\nERROR Message: \n{e}")
 
-            message = f"Error. Couldn't scrape taz.de\n\n{e}"
+            message = f"Error while scraping {link} \n\n{e}"
             messageAdmin(message)
 
     # Add items from tmpCollection to Collection in reversed order
@@ -164,10 +163,6 @@ def scrape():
     for key, value in COLLECTION.items():
         articleList.append(value["title"])
     print("Today's articles: ", articleList)
-
-    if len(COLLECTION) == 0 or len(articles) == 0:
-        message = f"Scraping(): Possible problem with scraping of taz.de. COLLECTION = {COLLECTION}"
-        messageAdmin(message)
 
 def send(attempt=0):
     global COLLECTION
