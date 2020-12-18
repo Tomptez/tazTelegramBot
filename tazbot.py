@@ -124,13 +124,14 @@ def scrape():
     try:
         website = requests.get(urlTaz)
         soup = BeautifulSoup(website.content, features="html.parser")
-        meistgelesenDiv = soup.find("div", "sect_shop")
-        meistgelesenUl = meistgelesenDiv.find("ul")
-        articles = meistgelesenUl.find_all("a")
-    except Exception:
+        meistgelesenDiv = soup.find("div", "clip_small")
+        meistgelesenUl = meistgelesenDiv.find_all("ul")
+        articleUl = meistgelesenUl[1]
+        articles = articleUl.find_all("a")
+    except Exception as e:
         articles = []
-        print("ERROR encountered. Maybe taz.de is down?")
-        messageAdmin("ERROR encountered. Maybe taz.de is down?")
+        print(f"ERROR encountered. Maybe taz.de is down? \n {e}")
+        messageAdmin(f"ERROR encountered. Maybe taz.de is down? \n {e}")
 
     tmpCollection = {}
     
@@ -139,7 +140,7 @@ def scrape():
         try:
             title = a.contents[0].text
             urlArticle = str(a.get('href'))
-            link = urlTaz+urlArticle
+            link = urlTaz+"/"+urlArticle.split("/")[-2]+"/"
 
             # Add article
             addArticle(link, title, tmpCollection)
