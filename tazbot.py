@@ -229,21 +229,19 @@ def send(attempt=0):
         print("Saved Article-titles: ", len(saved))
         session.close()
 
-if __name__ == "__main__":
-    print("Telegram Bot Infos: ", bot.get_me())
-
-    schedule.every().day.at("21:00").do(scrape)
-    schedule.every().day.at("00:10").do(scrape)
-    schedule.every().day.at("11:00").do(scrape)
-    schedule.every().day.at("13:45").do(scrape)
-    schedule.every().day.at("15:45").do(scrape)
-    schedule.every().day.at("17:00").do(scrape)
-    schedule.every().day.at("17:30").do(scrape)
-    schedule.every().day.at("17:55").do(scrape)
-    schedule.every().day.at("18:12").do(scrape)
-    schedule.every().day.at("18:15").do(send)
-
+def scrape_and_send():
     scrape()
+    send()
+
+if __name__ == "__main__":
+    time_date_now = datetime.datetime.now().strftime("%d.%m %H:%M")
+    print(f"{time_date_now} Tazbot started")
+    print("Telegram Bot Infos: ", bot.get_me())
+    scrape()
+
+    send_time = os.environ.get("DAILY_SEND_TIME", "18:15")
+    schedule.every().hour.do(scrape)
+    schedule.every().day.at(send_time).do(scrape_and_send)
 
     while True:
         try:
