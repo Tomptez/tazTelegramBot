@@ -18,9 +18,9 @@ from collections import Counter
 
 load_dotenv()
 
-token = os.environ["telegramToken"]
-adminUsername = os.environ["adminTelegramChatID"]
-channelName = os.environ["publicChannelName"]
+token = os.environ["TELEGRAM_TOKEN"]
+adminUsername = os.environ["ADMIN_TELEGRAM_CHAT_ID"]
+channelName = os.environ["PUBLIC_CHANNEL_NAME"]
 
 engine = create_engine(os.environ["DATABASE_URL"])
 Base = declarative_base()
