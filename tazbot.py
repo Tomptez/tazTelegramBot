@@ -4,6 +4,7 @@ import requests
 import schedule
 import telegram
 import time
+import pickle
 import os
 import math
 import datetime
@@ -37,7 +38,12 @@ Session = sessionmaker(bind=engine)
 
 
 bot = telegram.Bot(token=token)
-COLLECTION = {}
+
+try:
+    with open("tmp_articles.pkl", "rb") as fp:
+        COLLECTION = pickle.load(fp)
+except:
+    COLLECTION = {}
 
 def messageAdmin(message):
     try:
@@ -136,7 +142,6 @@ def scrape():
     tmpCollection = {}
     
     for a in articles:
-        
         try:
             title = a.contents[0].text
             urlArticle = str(a.get('href'))
@@ -148,22 +153,22 @@ def scrape():
         except Exception:
             e = traceback.format_exc()
             print()
-            print(f"Error while scrpaing {link}\nERROR Message: \n{e}")
+            print(f"Error while scraping {link}\nERROR Message: \n{e}")
 
             message = f"Error while scraping {link} \n\n{e}"
             messageAdmin(message)
 
     # Add items from tmpCollection to Collection in reversed order
-    for i in range(-1,(len(tmpCollection)+1)*-1,-1):
-        key = list(tmpCollection.keys())[i]
+    for key in reversed(tmpCollection.keys()):
         COLLECTION[key] = tmpCollection[key]  
     
+    print(f"Added {len(tmpCollection)} new articles in last scrape")
     print(f"Number of articles for today: {len(COLLECTION)}")
+    print("Today's articles: ", [(each["title"], each["ressort"]) for each in COLLECTION.values()])
     
-    articleList = []
-    for key, value in COLLECTION.items():
-        articleList.append(value["title"])
-    print("Today's articles: ", articleList)
+    # Save current articles in pickle
+    with open("tmp_articles.pkl", "wb") as fp:
+        pickle.dump(COLLECTION, fp)
 
 def send(attempt=0):
     global COLLECTION
@@ -211,6 +216,10 @@ def send(attempt=0):
         old = session.query(dbArticle).filter(dbArticle.created<=eightdays).delete()
         session.commit()
         COLLECTION = {}
+        # Clear tmp_articles.pkl
+        with open("tmp_articles.pkl", "wb") as fp:
+            pickle.dump(COLLECTION, fp)
+        
         print("Sending successful!")
         
     except Exception:
@@ -235,8 +244,9 @@ def scrape_and_send():
 
 if __name__ == "__main__":
     time_date_now = datetime.datetime.now().strftime("%d.%m %H:%M")
-    print(f"{time_date_now} Tazbot started")
-    print("Telegram Bot Infos: ", bot.get_me())
+    print(f"\n--- [{time_date_now}] Tazbot launched ---")
+    print(f'Telegram Bot name: {bot.get_me()["name"]} ID: {bot.get_me()["id"]}')
+    print(f"Loaded {len(COLLECTION)} articles from last run")
     scrape()
 
     send_time = os.environ.get("DAILY_SEND_TIME", "18:15")
