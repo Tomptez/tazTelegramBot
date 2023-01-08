@@ -132,7 +132,8 @@ def articlesFromRSS():
         messageAdmin(message)
 
 def scrape():
-    logger.info("Scraping...")
+    time_now = datetime.datetime.now().strftime("%H:%M")
+    logger.info(f"[{time_now}] Scraping...")
 
     global COLLECTION
 
