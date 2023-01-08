@@ -16,6 +16,12 @@ from dotenv import load_dotenv
 import traceback
 import feedparser
 from collections import Counter
+import logging
+import logging.config
+
+# Load logging config and create logger
+logging.config.fileConfig('config_log.ini')
+logger = logging.getLogger('root')
 
 load_dotenv()
 
@@ -40,6 +46,12 @@ Session = sessionmaker(bind=engine)
 bot = telegram.Bot(token=token)
 
 try:
+    bot_info = bot.get_me()
+except:
+    bot_info = {"name": None, "id": None}
+    logger.warning("Connection to telegram timed out")
+
+try:
     with open("tmp_articles.pkl", "rb") as fp:
         COLLECTION = pickle.load(fp)
 except:
@@ -49,7 +61,7 @@ def messageAdmin(message):
     try:
         bot.send_message(adminUsername, message)
     except Exception:
-        print(f"Error. Could not send Error message to admin.")
+        logger.error("Could not send Error message to admin.")
         
 def addArticle(link, title, tmpCollection):
     global COLLECTION
@@ -73,7 +85,7 @@ def addArticle(link, title, tmpCollection):
         ressort = soup.find_all("div","sect_meta")[0].div.ul.li.a.span.text
     except Exception:
         ressort = "None"
-        print(title," has no ressort")
+        logger.warning(f"{title} has no ressort")
     subtitle = soup.find_all("p", "intro")
     messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{url}"
     tmpCollection[articleID] = {"text":messageText, "title":title, "ressort":ressort}
@@ -89,7 +101,7 @@ def articlesFromRSS():
         polNum = math.floor((needed-1)/2)
         geselNum = math.ceil((needed-1)/2)+1
 
-    print(f"Add {needed} Articles from RSS")
+    logger.info(f"Add {needed} Articles from RSS")
 
     try:
         tmpCollection = {}
@@ -115,13 +127,12 @@ def articlesFromRSS():
         COLLECTION = {**COLLECTION,**tmpCollection}
 
     except Exception as e:
-        print("ERROR: Failed to get articles from RSS-Feed")
         message = f"Failed to get articles from RSS-Feed \n {e}"
+        logger.error(message)
         messageAdmin(message)
 
 def scrape():
-    time_now = datetime.datetime.now().strftime("%H:%M")
-    print(f"[{time_now}] Scraping...")
+    logger.info("Scraping...")
 
     global COLLECTION
 
@@ -136,7 +147,7 @@ def scrape():
         articles = articleUl.find_all("a")
     except Exception as e:
         articles = []
-        print(f"ERROR encountered. Maybe taz.de is down? \n {e}")
+        logger.error(f"Maybe taz.de is down? \n {e}")
         messageAdmin(f"ERROR encountered. Maybe taz.de is down? \n {e}")
 
     tmpCollection = {}
@@ -152,8 +163,7 @@ def scrape():
 
         except Exception:
             e = traceback.format_exc()
-            print()
-            print(f"Error while scraping {link}\nERROR Message: \n{e}")
+            logger.error(f"Error while scraping {link}\nERROR Message: \n{e}")
 
             message = f"Error while scraping {link} \n\n{e}"
             messageAdmin(message)
@@ -162,9 +172,9 @@ def scrape():
     for key in reversed(tmpCollection.keys()):
         COLLECTION[key] = tmpCollection[key]  
     
-    print(f"Added {len(tmpCollection)} new articles in last scrape")
-    print(f"Number of articles for today: {len(COLLECTION)}")
-    print("Today's articles: ", [(each["title"], each["ressort"]) for each in COLLECTION.values()])
+    logger.info(f"Added {len(tmpCollection)} new articles. Total today: {len(COLLECTION)}")
+    titles_ressorts = [(each["title"], each["ressort"]) for each in COLLECTION.values()]
+    logger.debug(f"Today's articles: {titles_ressorts}")
     
     # Save current articles in pickle
     with open("tmp_articles.pkl", "wb") as fp:
@@ -172,25 +182,24 @@ def scrape():
 
 def send(attempt=0):
     global COLLECTION
-    print("----------")
     articlesFromRSS()
     ressortList =  []
     for key, value in COLLECTION.items():
         ressortList.append(value["ressort"])
-    print("Ressorts: ",Counter(ressortList))
+    logger.info("-------Ressorts: ",Counter(ressortList))
     
     
     time_now = datetime.datetime.now().strftime("%H:%M")
-    print(f"[{time_now}] Sending...")
+    logger.info(f"[{time_now}] Sending...")
 
     finalMessage = ""
 
     if len(COLLECTION) == 0:
-        print("Empty COLLECTION. Could not send anything.")
+        logger.warning("Empty COLLECTION. Could not send anything.")
         session = Session()
         saved = session.query(dbArticle).all()
         session.close()
-        print("Saved Article-titles: ", len(saved))
+        logger.debug(f"Number of articles in db: {len(saved)}")
         return False
 
     sentArticles = []
@@ -200,7 +209,7 @@ def send(attempt=0):
             finalMessage += COLLECTION[key]["text"]+"\n\n"
             sentArticles.append(key)
         except Exception:
-            print("Less than 8 Articles in COLLECTION")
+            logger.warning("Less than 8 Articles in COLLECTION")
             break
 
     try:
@@ -215,27 +224,27 @@ def send(attempt=0):
         eightdays = datetime.datetime.now()-datetime.timedelta(days=8)
         old = session.query(dbArticle).filter(dbArticle.created<=eightdays).delete()
         session.commit()
-        COLLECTION = {}
+        
         # Clear tmp_articles.pkl
+        COLLECTION = {}
         with open("tmp_articles.pkl", "wb") as fp:
             pickle.dump(COLLECTION, fp)
         
-        print("Sending successful!")
+        logger.info("Sending successful!")
         
     except Exception:
         if attempt <= 1:
-            print(f"Message: \n{finalMessage}")
+            logger.error(f"Message: \n{finalMessage} \n {e}")
             e = traceback.format_exc()
-            print(e)
             messageAdmin(f"Couln't send message:\n{finalMessage}\n\n. Will try to send again in 10 minutes...\nError:\n\n{e}")
         if attempt <= 20:
-            print("Couln't send articles. Will try to send again in 13 minutes...")
+            logger.warning("Couln't send articles. Will try to send again in 13 minutes...")
             time.sleep(780)
             scrape()
             send(attempt+1)
     finally:
         saved = session.query(dbArticle).all()
-        print("Saved Article-titles: ", len(saved))
+        logger.debug("Article-titles in database ", len(saved))
         session.close()
 
 def scrape_and_send():
@@ -243,19 +252,21 @@ def scrape_and_send():
     send()
 
 if __name__ == "__main__":
-    time_date_now = datetime.datetime.now().strftime("%d.%m %H:%M")
-    print(f"\n--- [{time_date_now}] Tazbot launched ---")
-    print(f'Telegram Bot name: {bot.get_me()["name"]} ID: {bot.get_me()["id"]}')
-    print(f"Loaded {len(COLLECTION)} articles from last run")
-    scrape()
+    logger.info(f"--- Tazbot launched ---")
+    logger.info(f"Logfile location: {logger.handlers[1].baseFilename}")
+    logger.info(f'Telegram Bot name: {bot_info["name"]} ID: {bot_info["id"]} Target Channel: {channelName}')
+    logger.info(f"Loaded {len(COLLECTION)} articles from last run")
+
 
     send_time = os.environ.get("DAILY_SEND_TIME", "18:15")
-    schedule.every().hour.do(scrape)
     schedule.every().day.at(send_time).do(scrape_and_send)
+
+    scrape()
+    schedule.every().hour.do(scrape)
 
     while True:
         try:
             schedule.run_pending()
-            time.sleep(300)
+            time.sleep(60)
         except Exception as e:
-            print(e)
+            logger.error
