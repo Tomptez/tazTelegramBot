@@ -1,4 +1,4 @@
-#Small telegram bot that gets most popular articles from taz.de and sends them in a telegram channel
+# Small telegram bot that gets most popular articles from taz.de and sends them to a telegram channel
 from bs4 import BeautifulSoup
 import requests
 import schedule
@@ -7,9 +7,10 @@ import time
 import pickle
 import os
 import math
+import sys
 import datetime
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -18,6 +19,7 @@ import feedparser
 from collections import Counter
 import logging
 import logging.config
+import asyncio
 
 # Load logging config and create logger
 logging.config.fileConfig('config_log.ini')
@@ -39,14 +41,16 @@ class dbArticle(Base):
     created = Column(DateTime, default=datetime.datetime.utcnow)
 
 Base.metadata.bind = engine      
-Base.metadata.create_all() 
+Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 
-
-bot = telegram.Bot(token=token)
+async def get_bot_info():
+    bot = await telegram.Bot(token=token)
+    bot_info = await bot.get_me()
+    return bot_info
 
 try:
-    bot_info = bot.get_me()
+    bot_info = asyncio.run(get_bot_info())
 except:
     bot_info = {"name": None, "id": None}
     logger.warning("Connection to telegram timed out")
@@ -82,11 +86,12 @@ def addArticle(link, title, tmpCollection):
 
     url = "https://taz.de/!"+articleID
     try:
-        ressort = soup.find_all("div","sect_meta")[0].div.ul.li.a.span.text
+        ressort = soup.find(attrs={"data-breadcrumb-level": "1"}).find("a").text
+        #ressort = soup.find_all("div","sect_meta")[0].div.ul.li.a.span.text
     except Exception:
         ressort = "None"
         logger.warning(f"{title} has no ressort")
-    subtitle = soup.find_all("p", "intro")
+    subtitle = soup.find_all("p", class_=lambda value: value and "subline" in value)
     messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{url}"
     tmpCollection[articleID] = {"text":messageText, "title":title, "ressort":ressort}
     session.close()
@@ -142,20 +147,20 @@ def scrape():
     try:
         website = requests.get(urlTaz)
         soup = BeautifulSoup(website.content, features="html.parser")
-        meistgelesenDiv = soup.find("div", "clip_small")
-        meistgelesenUl = meistgelesenDiv.find_all("ul")
-        articleUl = meistgelesenUl[1]
-        articles = articleUl.find_all("a")
+        meistgelesenDiv = soup.find_all("div", "type-mostread")
+        articles = []
+        for div in meistgelesenDiv:
+            articles.append(div.find("a", "teaser-link"))
     except Exception as e:
         articles = []
-        logger.error(f"Maybe taz.de is down? \n {e}")
+        logger.error(f"Maybe taz.de is down? Or taz layout changed? \n {e}")
         messageAdmin(f"ERROR encountered. Maybe taz.de is down? \n {e}")
 
     tmpCollection = {}
     
     for a in articles:
         try:
-            title = a.contents[0].text
+            title = a.find("p", "headline").text
             urlArticle = str(a.get('href'))
             link = urlTaz+"/"+urlArticle.split("/")[-2]+"/"
 
@@ -178,6 +183,7 @@ def scrape():
     logger.debug(f"Today's articles: {titles_ressorts}")
     
     # Save current articles in pickle
+    print(COLLECTION)
     with open("tmp_articles.pkl", "wb") as fp:
         pickle.dump(COLLECTION, fp)
 
@@ -185,14 +191,13 @@ def send(attempt=0):
     global COLLECTION
     articlesFromRSS()
     ressortList =  []
+
+    logger.info(f"Start sending...")
     for key, value in COLLECTION.items():
         ressortList.append(value["ressort"])
-    logger.info("-------Ressorts: ",Counter(ressortList))
-    
+    logger.debug("----- Ressorts: ",Counter(ressortList))
     
     time_now = datetime.datetime.now().strftime("%H:%M")
-    logger.info(f"[{time_now}] Sending...")
-
     finalMessage = ""
 
     if len(COLLECTION) == 0:
@@ -244,9 +249,13 @@ def send(attempt=0):
             scrape()
             send(attempt+1)
     finally:
-        saved = session.query(dbArticle).all()
-        logger.debug("Article-titles in database ", len(saved))
-        session.close()
+        logger.debug("Start the finally bracket")
+        try:
+            saved = session.query(dbArticle).all()
+            logger.debug("Article-titles in database ", len(saved))
+            session.close()
+        except:
+            logger.debug("Encountered Problem")
 
 def scrape_and_send():
     scrape()
