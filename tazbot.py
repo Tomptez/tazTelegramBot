@@ -1,4 +1,5 @@
 # Small telegram bot that gets most popular articles from taz.de and sends them to a telegram channel
+# -*- coding: utf-8 -*-
 from bs4 import BeautifulSoup
 import requests
 import schedule
