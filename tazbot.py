@@ -268,7 +268,6 @@ if __name__ == "__main__":
     send_time = os.environ.get("DAILY_SEND_TIME", "18:15")
     schedule.every().day.at(send_time).do(scrape_and_send)
 
-    scrape_and_send()
     schedule.every().hour.do(scrape)
 
     while True:
