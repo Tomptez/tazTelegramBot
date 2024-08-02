@@ -46,15 +46,16 @@ Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 
 async def get_bot_info():
-    bot = await telegram.Bot(token=token)
+    bot = telegram.Bot(token=token)
     bot_info = await bot.get_me()
-    return bot_info
+    return bot, bot_info
 
 try:
-    bot_info = asyncio.run(get_bot_info())
-except:
+    bot, bot_info = asyncio.run(get_bot_info())
+except Exception as e:
     bot_info = {"name": None, "id": None}
-    logger.warning("Connection to telegram timed out")
+    logger.error(f"Could not connect to telegram\n{e}")
+    sys.exit()
 
 try:
     with open("tmp_articles.pkl", "rb") as fp:
@@ -62,9 +63,9 @@ try:
 except:
     COLLECTION = {}
 
-def messageAdmin(message):
+async def messageAdmin(message):
     try:
-        bot.send_message(adminUsername, message)
+        await bot.send_message(adminUsername, message)
     except Exception:
         logger.error("Could not send Error message to admin.")
         
@@ -93,7 +94,7 @@ def addArticle(link, title, tmpCollection):
         ressort = "None"
         logger.warning(f"{title} has no ressort")
     subtitle = soup.find_all("p", class_=lambda value: value and "subline" in value)
-    messageText = f"<b>{title}</b>\n{subtitle[0].text} \n{url}"
+    messageText = f"<b>{title.replace("\n","")}</b>\n{subtitle[0].text.replace("\n","")} \n{url}"
     tmpCollection[articleID] = {"text":messageText, "title":title, "ressort":ressort}
     session.close()
 
@@ -135,7 +136,7 @@ def articlesFromRSS():
     except Exception as e:
         message = f"Failed to get articles from RSS-Feed \n {e}"
         logger.error(message)
-        messageAdmin(message)
+        asyncio.run(messageAdmin(message))
 
 def scrape():
     time_now = datetime.datetime.now().strftime("%H:%M")
@@ -155,7 +156,7 @@ def scrape():
     except Exception as e:
         articles = []
         logger.error(f"Maybe taz.de is down? Or taz layout changed? \n {e}")
-        messageAdmin(f"ERROR encountered. Maybe taz.de is down? \n {e}")
+        asyncio.run(messageAdmin(f"ERROR encountered. Maybe taz.de is down? \n {e}"))
 
     tmpCollection = {}
     
@@ -173,7 +174,7 @@ def scrape():
             logger.error(f"Error while scraping {link}\nERROR Message: \n{e}")
 
             message = f"Error while scraping {link} \n\n{e}"
-            messageAdmin(message)
+            asyncio.run(messageAdmin(message))
 
     # Add items from tmpCollection to Collection in reversed order
     for key in reversed(tmpCollection.keys()):
@@ -184,11 +185,10 @@ def scrape():
     logger.debug(f"Today's articles: {titles_ressorts}")
     
     # Save current articles in pickle
-    print(COLLECTION)
     with open("tmp_articles.pkl", "wb") as fp:
         pickle.dump(COLLECTION, fp)
 
-def send(attempt=0):
+async def send(attempt=0):
     global COLLECTION
     articlesFromRSS()
     ressortList =  []
@@ -223,7 +223,8 @@ def send(attempt=0):
         session = Session()
         if finalMessage == "":
             raise Exception("Empty message")
-        bot.send_message(channelName, finalMessage, parse_mode=telegram.ParseMode.HTML)
+        bot = telegram.Bot(token=token)
+        await bot.send_message(channelName, finalMessage, parse_mode=telegram.constants.ParseMode.HTML)
 
         for eachkey in COLLECTION:
             session.add(dbArticle(key=eachkey))
@@ -239,28 +240,23 @@ def send(attempt=0):
         
         logger.info("Sending successful!")
         
-    except Exception:
+    except Exception as e:
         if attempt <= 1:
-            logger.error(f"Message: \n{finalMessage} \n {e}")
+            logger.error(f"Error when trying to send\n{e}")
             e = traceback.format_exc()
-            messageAdmin(f"Couln't send message:\n{finalMessage}\n\n. Will try to send again in 10 minutes...\nError:\n\n{e}")
-        if attempt <= 20:
-            logger.warning("Couln't send articles. Will try to send again in 13 minutes...")
-            time.sleep(780)
-            scrape()
-            send(attempt+1)
+
     finally:
         logger.debug("Start the finally bracket")
         try:
             saved = session.query(dbArticle).all()
-            logger.debug("Article-titles in database ", len(saved))
+            logger.debug("Article-titles in database ", len(saved[0]))
             session.close()
         except:
             logger.debug("Encountered Problem")
 
 def scrape_and_send():
     scrape()
-    send()
+    asyncio.run(send())
 
 if __name__ == "__main__":
     logger.info(f"--- Tazbot launched ---")
@@ -272,7 +268,7 @@ if __name__ == "__main__":
     send_time = os.environ.get("DAILY_SEND_TIME", "18:15")
     schedule.every().day.at(send_time).do(scrape_and_send)
 
-    scrape()
+    scrape_and_send()
     schedule.every().hour.do(scrape)
 
     while True:
