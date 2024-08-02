@@ -8,3 +8,5 @@ It's a rather basic bot made primarily for learning purposes.
 `telegramToken` = Token of the telegram bot  
 `adminTelegramChatID` = Chat Id between Bot and Admin  
 `publicChannelName` = Name of the public channel (in which the bot has to be an administrator)
+
+Compatible with Python 3.12+
